@@ -1,6 +1,55 @@
 | Name | Description | Default keybinds |
 | --- | --- | --- |
 | `no_op` | Do nothing |  |
+| `standard_mode` | Enter standard editing mode | normal: `` <F6> ``, select: `` <F6> ``, insert: `` <F6> `` |
+| `standard_left` | Move caret left | standard: `` <left> `` |
+| `standard_right` | Move caret right | standard: `` <right> `` |
+| `standard_up` | Move caret up | standard: `` <up> `` |
+| `standard_down` | Move caret down | standard: `` <down> `` |
+| `standard_move_lines_up` | Move current or selected lines up | standard: `` <A-up> `` |
+| `standard_move_lines_down` | Move current or selected lines down | standard: `` <A-down> `` |
+| `standard_ten_lines_up` | Move caret ten source lines up | standard: `` <C-up> `` |
+| `standard_ten_lines_down` | Move caret ten source lines down | standard: `` <C-down> `` |
+| `standard_select_ten_lines_up` | Extend selection ten source lines up | standard: `` <S-C-up> `` |
+| `standard_select_ten_lines_down` | Extend selection ten source lines down | standard: `` <S-C-down> `` |
+| `standard_section_up` | Move caret to previous function, class or section boundary | standard: `` <A-C-up> `` |
+| `standard_section_down` | Move caret to next function, class or section boundary | standard: `` <A-C-down> `` |
+| `standard_select_section_up` | Extend selection to previous function, class or section boundary | standard: `` <S-A-C-up> `` |
+| `standard_select_section_down` | Extend selection to next function, class or section boundary | standard: `` <S-A-C-down> `` |
+| `standard_select_left` | Extend selection left | standard: `` <S-left> `` |
+| `standard_select_right` | Extend selection right | standard: `` <S-right> `` |
+| `standard_select_up` | Extend selection up | standard: `` <S-up> `` |
+| `standard_select_down` | Extend selection down | standard: `` <S-down> `` |
+| `standard_word_left` | Move caret to previous word | standard: `` <C-left> `` |
+| `standard_word_right` | Move caret to next word | standard: `` <C-right> `` |
+| `standard_select_word_left` | Extend selection to previous word | standard: `` <S-C-left> `` |
+| `standard_select_word_right` | Extend selection to next word | standard: `` <S-C-right> `` |
+| `standard_home` | Move caret to line start | standard: `` <home> `` |
+| `standard_end` | Move caret to line end | standard: `` <end> `` |
+| `standard_select_home` | Extend selection to line start | standard: `` <S-home> `` |
+| `standard_select_end` | Extend selection to line end | standard: `` <S-end> `` |
+| `standard_file_start` | Move caret to document start | standard: `` <C-home> `` |
+| `standard_file_end` | Move caret to document end | standard: `` <C-end> `` |
+| `standard_select_file_start` | Extend selection to document start | standard: `` <S-C-home> `` |
+| `standard_select_file_end` | Extend selection to document end | standard: `` <S-C-end> `` |
+| `standard_page_up` | Move caret one page up | standard: `` <pageup> `` |
+| `standard_page_down` | Move caret one page down | standard: `` <pagedown> `` |
+| `standard_select_page_up` | Extend selection one page up | standard: `` <S-pageup> `` |
+| `standard_select_page_down` | Extend selection one page down | standard: `` <S-pagedown> `` |
+| `standard_select_all` | Select the document | standard: `` <C-a> `` |
+| `standard_escape` | Clear selection | standard: `` <esc> `` |
+| `standard_delete_backward` | Delete selection or previous grapheme | standard: `` <backspace> ``, `` <S-backspace> `` |
+| `standard_delete_forward` | Delete selection or next grapheme | standard: `` <del> `` |
+| `standard_delete_word_backward` | Delete selection or previous word | standard: `` <A-backspace> ``, `` <C-backspace> `` |
+| `standard_delete_word_forward` | Delete selection or next word | standard: `` <C-del> `` |
+| `standard_copy` | Copy selected text to clipboard | standard: `` <C-c> `` |
+| `standard_cut` | Cut selected text or current lines to clipboard | standard: `` <C-x> `` |
+| `standard_paste` | Replace selected text with clipboard | standard: `` <C-v> `` |
+| `standard_newline` | Replace selection with an indented newline | standard: `` <ret> `` |
+| `standard_tab` | Insert indentation or indent selected lines | standard: `` <tab> `` |
+| `standard_unindent` | Unindent selected lines | standard: `` <S-tab> `` |
+| `standard_comment` | Comment current or selected lines | standard: `` <C-k>c ``, `` <C-k><C-c> `` |
+| `standard_uncomment` | Uncomment current or selected lines | standard: `` <C-k>u ``, `` <C-k><C-u> `` |
 | `move_char_left` | Move left | normal: `` h ``, `` <left> ``, insert: `` <left> `` |
 | `move_char_right` | Move right | normal: `` l ``, `` <right> ``, insert: `` <right> `` |
 | `move_line_up` | Move up | normal: `` gk `` |
@@ -96,14 +145,14 @@
 | `ensure_selections_forward` | Ensure all selections face forward | normal: `` <A-:> ``, select: `` <A-:> `` |
 | `insert_mode` | Insert before selection | normal: `` i ``, select: `` i `` |
 | `append_mode` | Append after selection | normal: `` a ``, select: `` a `` |
-| `command_mode` | Enter command mode | normal: `` : ``, select: `` : `` |
-| `file_picker` | Open file picker | normal: `` <space>f ``, select: `` <space>f `` |
+| `command_mode` | Enter command mode | normal: `` : ``, select: `` : ``, standard: `` <F1> ``, `` <C-P> `` |
+| `file_picker` | Open file picker | normal: `` <space>f ``, select: `` <space>f ``, standard: `` <C-p> `` |
 | `file_picker_in_current_buffer_directory` | Open file picker at current buffer's directory |  |
 | `file_picker_in_current_directory` | Open file picker at current working directory | normal: `` <space>F ``, select: `` <space>F `` |
 | `file_explorer` | Open file explorer in workspace root | normal: `` <space>e ``, select: `` <space>e `` |
 | `file_explorer_in_current_buffer_directory` | Open file explorer at current buffer's directory | normal: `` <space>. ``, select: `` <space>. `` |
 | `file_explorer_in_current_directory` | Open file explorer at current working directory |  |
-| `code_action` | Perform code action | normal: `` <space>a ``, select: `` <space>a `` |
+| `code_action` | Perform code action | normal: `` <space>a ``, select: `` <space>a ``, standard: `` <C-.> `` |
 | `buffer_picker` | Open buffer picker | normal: `` <space>b ``, select: `` <space>b `` |
 | `jumplist_picker` | Open jumplist picker | normal: `` <space>j ``, select: `` <space>j `` |
 | `symbol_picker` | Open symbol picker |  |
@@ -121,15 +170,15 @@
 | `insert_at_line_end` | Insert at end of line | normal: `` A ``, select: `` A `` |
 | `open_below` | Open new line below selection | normal: `` o ``, select: `` o `` |
 | `open_above` | Open new line above selection | normal: `` O ``, select: `` O `` |
-| `normal_mode` | Enter normal mode | normal: `` <esc> ``, select: `` v ``, insert: `` <esc> `` |
+| `normal_mode` | Enter normal mode | normal: `` <esc> ``, select: `` v ``, insert: `` <esc> ``, standard: `` <F6> `` |
 | `select_mode` | Enter selection extend mode | normal: `` v `` |
 | `exit_select_mode` | Exit selection mode | select: `` <esc> `` |
-| `goto_definition` | Goto definition | normal: `` gd ``, select: `` gd `` |
+| `goto_definition` | Goto definition | normal: `` gd ``, select: `` gd ``, standard: `` <F12> `` |
 | `goto_declaration` | Goto declaration | normal: `` gD ``, select: `` gD `` |
 | `add_newline_above` | Add newline above | normal: `` [<space> ``, select: `` [<space> `` |
 | `add_newline_below` | Add newline below | normal: `` ]<space> ``, select: `` ]<space> `` |
 | `goto_type_definition` | Goto type definition | normal: `` gy ``, select: `` gy `` |
-| `goto_implementation` | Goto implementation | normal: `` gi ``, select: `` gi `` |
+| `goto_implementation` | Goto implementation | normal: `` gi ``, select: `` gi ``, standard: `` <C-F12> `` |
 | `goto_file_start` | Goto line number `<n>` else file start | normal: `` gg `` |
 | `goto_file_end` | Goto file end |  |
 | `extend_to_file_start` | Extend to line number `<n>` else file start | select: `` gg `` |
@@ -137,7 +186,7 @@
 | `goto_file` | Goto files/URLs in selections | normal: `` gf ``, select: `` gf `` |
 | `goto_file_hsplit` | Goto files in selections (hsplit) | normal: `` <C-w>f ``, `` <space>wf ``, select: `` <C-w>f ``, `` <space>wf `` |
 | `goto_file_vsplit` | Goto files in selections (vsplit) | normal: `` <C-w>F ``, `` <space>wF ``, select: `` <C-w>F ``, `` <space>wF `` |
-| `goto_reference` | Goto references | normal: `` gr ``, select: `` gr `` |
+| `goto_reference` | Goto references | normal: `` gr ``, select: `` gr ``, standard: `` <S-F12> `` |
 | `goto_window_top` | Goto window top | normal: `` gt ``, select: `` gt `` |
 | `goto_window_center` | Goto window center | normal: `` gc ``, select: `` gc `` |
 | `goto_window_bottom` | Goto window bottom | normal: `` gb ``, select: `` gb `` |
@@ -180,8 +229,8 @@
 | `delete_word_forward` | Delete next word | insert: `` <A-d> ``, `` <A-del> `` |
 | `kill_to_line_start` | Delete till start of line | insert: `` <C-u> `` |
 | `kill_to_line_end` | Delete till end of line | insert: `` <C-k> `` |
-| `undo` | Undo change | normal: `` u ``, select: `` u `` |
-| `redo` | Redo change | normal: `` U ``, select: `` U `` |
+| `undo` | Undo change | normal: `` u ``, select: `` u ``, standard: `` <C-z> `` |
+| `redo` | Redo change | normal: `` U ``, select: `` U ``, standard: `` <C-Z> ``, `` <C-y> `` |
 | `earlier` | Move backward in history | normal: `` <A-u> ``, select: `` <A-u> `` |
 | `later` | Move forward in history | normal: `` <A-U> ``, select: `` <A-U> `` |
 | `commit_undo_checkpoint` | Commit changes to new checkpoint | insert: `` <C-s> `` |
@@ -212,7 +261,7 @@
 | `align_selections` | Align selections in column | normal: `` & ``, select: `` & `` |
 | `keep_primary_selection` | Keep primary selection | normal: `` , ``, select: `` , `` |
 | `remove_primary_selection` | Remove primary selection | normal: `` <A-,> ``, select: `` <A-,> `` |
-| `completion` | Invoke completion popup | insert: `` <C-x> `` |
+| `completion` | Invoke completion popup | insert: `` <C-x> ``, standard: `` <C-space> `` |
 | `hover` | Show docs for item under cursor | normal: `` <space>k ``, select: `` <space>k `` |
 | `toggle_comments` | Comment/uncomment selections | normal: `` <C-c> ``, `` <space>c ``, select: `` <C-c> ``, `` <space>c `` |
 | `toggle_line_comments` | Line comment/uncomment selections | normal: `` <space><A-c> ``, select: `` <space><A-c> `` |
@@ -228,8 +277,8 @@
 | `select_prev_sibling` | Select previous sibling the in syntax tree | normal: `` <A-p> ``, `` <A-left> ``, select: `` <A-p> ``, `` <A-left> `` |
 | `select_all_siblings` | Select all siblings of the current node | normal: `` <A-a> ``, select: `` <A-a> `` |
 | `select_all_children` | Select all children of the current node | normal: `` <A-I> ``, `` <S-A-down> ``, select: `` <A-I> ``, `` <S-A-down> `` |
-| `jump_forward` | Jump forward on jumplist | normal: `` <C-i> ``, `` <tab> ``, select: `` <C-i> ``, `` <tab> `` |
-| `jump_backward` | Jump backward on jumplist | normal: `` <C-o> ``, select: `` <C-o> `` |
+| `jump_forward` | Jump forward on jumplist | normal: `` <C-i> ``, `` <tab> ``, select: `` <C-i> ``, `` <tab> ``, standard: `` <A-C-right> `` |
+| `jump_backward` | Jump backward on jumplist | normal: `` <C-o> ``, select: `` <C-o> ``, standard: `` <A-C-left> `` |
 | `save_selection` | Save current selection to jumplist | normal: `` <C-s> ``, select: `` <C-s> `` |
 | `jump_view_right` | Jump to right split | normal: `` <C-w>l ``, `` <space>wl ``, `` <C-w><C-l> ``, `` <C-w><right> ``, `` <space>w<C-l> ``, `` <space>w<right> ``, select: `` <C-w>l ``, `` <space>wl ``, `` <C-w><C-l> ``, `` <C-w><right> ``, `` <space>w<C-l> ``, `` <space>w<right> `` |
 | `jump_view_left` | Jump to left split | normal: `` <C-w>h ``, `` <space>wh ``, `` <C-w><C-h> ``, `` <C-w><left> ``, `` <space>w<C-h> ``, `` <space>w<left> ``, select: `` <C-w>h ``, `` <space>wh ``, `` <C-w><C-h> ``, `` <C-w><left> ``, `` <space>w<C-h> ``, `` <space>w<left> `` |
@@ -240,11 +289,11 @@
 | `swap_view_up` | Swap with split above | normal: `` <C-w>K ``, `` <space>wK ``, select: `` <C-w>K ``, `` <space>wK `` |
 | `swap_view_down` | Swap with split below | normal: `` <C-w>J ``, `` <space>wJ ``, select: `` <C-w>J ``, `` <space>wJ `` |
 | `transpose_view` | Transpose splits | normal: `` <C-w>t ``, `` <space>wt ``, `` <C-w><C-t> ``, `` <space>w<C-t> ``, select: `` <C-w>t ``, `` <space>wt ``, `` <C-w><C-t> ``, `` <space>w<C-t> `` |
-| `rotate_view` | Goto next window | normal: `` <C-w>w ``, `` <space>ww ``, `` <C-w><C-w> ``, `` <space>w<C-w> ``, select: `` <C-w>w ``, `` <space>ww ``, `` <C-w><C-w> ``, `` <space>w<C-w> `` |
-| `rotate_view_reverse` | Goto previous window |  |
+| `rotate_view` | Goto next window | normal: `` <C-w>w ``, `` <space>ww ``, `` <C-w><C-w> ``, `` <space>w<C-w> ``, select: `` <C-w>w ``, `` <space>ww ``, `` <C-w><C-w> ``, `` <space>w<C-w> ``, standard: `` <C-F6> `` |
+| `rotate_view_reverse` | Goto previous window | standard: `` <S-C-F6> `` |
 | `hsplit` | Horizontal bottom split | normal: `` <C-w>s ``, `` <space>ws ``, `` <C-w><C-s> ``, `` <space>w<C-s> ``, select: `` <C-w>s ``, `` <space>ws ``, `` <C-w><C-s> ``, `` <space>w<C-s> `` |
 | `hsplit_new` | Horizontal bottom split scratch buffer | normal: `` <C-w>ns ``, `` <space>wns ``, `` <C-w>n<C-s> ``, `` <space>wn<C-s> ``, select: `` <C-w>ns ``, `` <space>wns ``, `` <C-w>n<C-s> ``, `` <space>wn<C-s> `` |
-| `vsplit` | Vertical right split | normal: `` <C-w>v ``, `` <space>wv ``, `` <C-w><C-v> ``, `` <space>w<C-v> ``, select: `` <C-w>v ``, `` <space>wv ``, `` <C-w><C-v> ``, `` <space>w<C-v> `` |
+| `vsplit` | Vertical right split | normal: `` <C-w>v ``, `` <space>wv ``, `` <C-w><C-v> ``, `` <space>w<C-v> ``, select: `` <C-w>v ``, `` <space>wv ``, `` <C-w><C-v> ``, `` <space>w<C-v> ``, standard: `` <C-\> `` |
 | `vsplit_new` | Vertical right split scratch buffer | normal: `` <C-w>nv ``, `` <space>wnv ``, `` <C-w>n<C-v> ``, `` <space>wn<C-v> ``, select: `` <C-w>nv ``, `` <space>wnv ``, `` <C-w>n<C-v> ``, `` <space>wn<C-v> `` |
 | `wclose` | Close window | normal: `` <C-w>q ``, `` <space>wq ``, `` <C-w><C-q> ``, `` <space>w<C-q> ``, select: `` <C-w>q ``, `` <space>wq ``, `` <C-w><C-q> ``, `` <space>w<C-q> `` |
 | `wonly` | Close windows except current | normal: `` <C-w>o ``, `` <space>wo ``, `` <C-w><C-o> ``, `` <space>w<C-o> ``, select: `` <C-w>o ``, `` <space>wo ``, `` <C-w><C-o> ``, `` <space>w<C-o> `` |
@@ -301,7 +350,7 @@
 | `shell_append_output` | Append shell command output after selections | normal: `` <A-!> ``, select: `` <A-!> `` |
 | `shell_keep_pipe` | Filter selections with shell predicate | normal: `` $ ``, select: `` $ `` |
 | `suspend` | Suspend and return to shell | normal: `` <C-z> ``, select: `` <C-z> `` |
-| `rename_symbol` | Rename symbol | normal: `` <space>r ``, select: `` <space>r `` |
+| `rename_symbol` | Rename symbol | normal: `` <space>r ``, select: `` <space>r ``, standard: `` <F2> `` |
 | `increment` | Increment item under cursor | normal: `` <C-a> ``, select: `` <C-a> `` |
 | `decrement` | Decrement item under cursor | normal: `` <C-x> ``, select: `` <C-x> `` |
 | `record_macro` | Record macro | normal: `` Q ``, select: `` Q `` |

@@ -5,7 +5,6 @@ use helix_core::syntax::config::LanguageServerFeature;
 use helix_event::{cancelable_future, register_hook, send_blocking, TaskController, TaskHandle};
 use helix_lsp::lsp::{self, SignatureInformation};
 use helix_stdx::rope::RopeSliceExt;
-use helix_view::document::Mode;
 use helix_view::events::{DocumentDidChange, SelectionDidChange};
 use helix_view::handlers::lsp::{SignatureHelpEvent, SignatureHelpInvoked};
 use helix_view::Editor;
@@ -183,7 +182,7 @@ pub fn show_signature_help(
     // annoyance, see https://github.com/helix-editor/helix/issues/3112
     // For the most part this should not be needed as the request gets canceled automatically now
     // but it's technically possible for the mode change to just preempt this callback so better safe than sorry
-    if invoked == SignatureHelpInvoked::Automatic && editor.mode != Mode::Insert {
+    if invoked == SignatureHelpInvoked::Automatic && !editor.mode.is_text_input() {
         return;
     }
 
@@ -330,13 +329,13 @@ pub(super) fn register_hooks(handlers: &Handlers) {
     let tx = handlers.signature_hints.clone();
     register_hook!(move |event: &mut OnModeSwitch<'_, '_>| {
         match (event.old_mode, event.new_mode) {
-            (Mode::Insert, _) => {
+            (old, _) if old.is_text_input() => {
                 send_blocking(&tx, SignatureHelpEvent::Cancel);
                 event.cx.callback.push(Box::new(|compositor, _| {
                     compositor.remove(SignatureHelp::ID);
                 }));
             }
-            (_, Mode::Insert) if event.cx.editor.config().lsp.auto_signature_help => {
+            (_, new) if new.is_text_input() && event.cx.editor.config().lsp.auto_signature_help => {
                 send_blocking(&tx, SignatureHelpEvent::Trigger);
             }
             _ => (),

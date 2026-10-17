@@ -291,9 +291,28 @@ where
     Ok(chars)
 }
 
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DefaultMode {
+    #[default]
+    Normal,
+    Standard,
+}
+
+impl From<DefaultMode> for Mode {
+    fn from(mode: DefaultMode) -> Self {
+        match mode {
+            DefaultMode::Normal => Mode::Normal,
+            DefaultMode::Standard => Mode::Standard,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", default, deny_unknown_fields)]
 pub struct Config {
+    /// Editing mode used at startup.
+    pub default_mode: DefaultMode,
     /// Padding to keep between the edge of the screen and the cursor when scrolling. Defaults to 5.
     pub scrolloff: usize,
     /// Number of lines to scroll at once. Defaults to 3
@@ -718,6 +737,7 @@ pub struct ModeConfig {
     pub normal: String,
     pub insert: String,
     pub select: String,
+    pub standard: String,
 }
 
 impl Default for ModeConfig {
@@ -726,6 +746,7 @@ impl Default for ModeConfig {
             normal: String::from("NOR"),
             insert: String::from("INS"),
             select: String::from("SEL"),
+            standard: String::from("STD"),
         }
     }
 }
@@ -809,7 +830,7 @@ pub enum StatusLineElement {
 // Cursor shape is read and used on every rendered frame and so needs
 // to be fast. Therefore we avoid a hashmap and use an enum indexed array.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CursorShapeConfig([CursorKind; 3]);
+pub struct CursorShapeConfig([CursorKind; 4]);
 
 impl CursorShapeConfig {
     pub fn from_mode(&self, mode: Mode) -> CursorKind {
@@ -828,6 +849,7 @@ impl<'de> Deserialize<'de> for CursorShapeConfig {
             into_cursor(Mode::Normal),
             into_cursor(Mode::Select),
             into_cursor(Mode::Insert),
+            m.get(&Mode::Standard).copied().unwrap_or(CursorKind::Bar),
         ]))
     }
 }
@@ -838,7 +860,7 @@ impl Serialize for CursorShapeConfig {
         S: serde::Serializer,
     {
         let mut map = serializer.serialize_map(Some(self.len()))?;
-        let modes = [Mode::Normal, Mode::Select, Mode::Insert];
+        let modes = [Mode::Normal, Mode::Select, Mode::Insert, Mode::Standard];
         for mode in modes {
             map.serialize_entry(&mode, &self.from_mode(mode))?;
         }
@@ -847,7 +869,7 @@ impl Serialize for CursorShapeConfig {
 }
 
 impl std::ops::Deref for CursorShapeConfig {
-    type Target = [CursorKind; 3];
+    type Target = [CursorKind; 4];
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -856,7 +878,12 @@ impl std::ops::Deref for CursorShapeConfig {
 
 impl Default for CursorShapeConfig {
     fn default() -> Self {
-        Self([CursorKind::Block; 3])
+        Self([
+            CursorKind::Block,
+            CursorKind::Block,
+            CursorKind::Block,
+            CursorKind::Bar,
+        ])
     }
 }
 
@@ -1175,6 +1202,7 @@ impl Default for WordCompletion {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            default_mode: DefaultMode::Normal,
             scrolloff: 5,
             scroll_lines: 3,
             mouse: true,
@@ -1271,7 +1299,7 @@ use futures_util::stream::{Flatten, Once};
 type Diagnostics = BTreeMap<Uri, Vec<(lsp::Diagnostic, DiagnosticProvider)>>;
 
 pub struct Editor {
-    /// Current editing mode.
+    /// Current editing mode. Use `set_mode` to update document selection invariants.
     pub mode: Mode,
     pub tree: Tree,
     pub next_document_id: DocumentId,
@@ -1426,7 +1454,7 @@ impl Editor {
         area.height -= 1;
 
         Self {
-            mode: Mode::Normal,
+            mode: conf.default_mode.into(),
             tree: Tree::new(area),
             next_document_id: DocumentId::default(),
             documents: BTreeMap::new(),
@@ -1943,9 +1971,13 @@ impl Editor {
         }
 
         if !matches!(action, Action::Load) {
-            self.enter_normal_mode();
+            self.enter_default_mode();
         }
 
+        self.documents
+            .get_mut(&id)
+            .unwrap()
+            .set_caret_mode(self.mode == Mode::Standard);
         let focust_lost = match action {
             Action::Replace => {
                 let (view, doc) = current_ref!(self);
@@ -2011,6 +2043,13 @@ impl Editor {
             }
             Action::HorizontalSplit | Action::VerticalSplit => {
                 let focus_lost = self.tree.try_get(self.tree.focus).map(|view| view.doc);
+                if let Some(doc_id) = focus_lost {
+                    let view = self.tree.get_mut(self.tree.focus);
+                    self.documents
+                        .get_mut(&doc_id)
+                        .unwrap()
+                        .append_changes_to_history(view);
+                }
                 // copy the current view, unless there is no view yet
                 let view = self
                     .tree
@@ -2045,6 +2084,7 @@ impl Editor {
 
     /// Generate an id for a new document and register it.
     fn new_document(&mut self, mut doc: Document) -> DocumentId {
+        doc.set_caret_mode(self.mode == Mode::Standard);
         let id = self.next_document_id;
         // Safety: adding 1 from 1 is fine, practically impossible to reach usize max
         self.next_document_id =
@@ -2282,7 +2322,7 @@ impl Editor {
         }
 
         // Reset mode to normal and ensure any pending changes are committed in the old document.
-        self.enter_normal_mode();
+        self.enter_default_mode();
         let (view, doc) = current!(self);
         doc.append_changes_to_history(view);
         self.ensure_cursor_in_view(view_id);
@@ -2529,6 +2569,15 @@ impl Editor {
         Ok(())
     }
 
+    /// Update the editing mode and the selection representation in open documents.
+    pub fn set_mode(&mut self, mode: Mode) {
+        self.mode = mode;
+        for doc in self.documents.values_mut() {
+            doc.set_caret_mode(mode == Mode::Standard);
+        }
+        self.cursor_cache.reset();
+    }
+
     /// Switches the editor into normal mode.
     pub fn enter_normal_mode(&mut self) {
         use helix_core::graphemes;
@@ -2537,7 +2586,7 @@ impl Editor {
             return;
         }
 
-        self.mode = Mode::Normal;
+        self.set_mode(Mode::Normal);
         let (view, doc) = current!(self);
 
         try_restore_indent(doc, view);
@@ -2556,6 +2605,16 @@ impl Editor {
 
             doc.set_selection(view.id, selection);
             doc.restore_cursor = false;
+        }
+    }
+
+    fn enter_default_mode(&mut self) {
+        if self.mode == Mode::Standard {
+            return;
+        }
+        self.enter_normal_mode();
+        if self.config.load().default_mode == DefaultMode::Standard {
+            self.set_mode(Mode::Standard);
         }
     }
 
@@ -2622,8 +2681,7 @@ impl Editor {
         if old_doc_id != dest_doc_id {
             let new_doc = doc_mut!(self, &dest_doc_id);
             if let Some(transaction) = view.changes_to_sync(new_doc) {
-                let text = new_doc.text().slice(..);
-                selection = selection.map(transaction.changes()).ensure_invariants(text);
+                selection = new_doc.normalize_selection(selection.map(transaction.changes()));
             }
             self.replace_document_in_view(view_id, dest_doc_id);
             dispatch(DocumentFocusLost {
@@ -2684,7 +2742,7 @@ impl CursorCache {
         }
 
         let text = doc.text().slice(..);
-        let cursor = doc.selection(view.id).primary().cursor(text);
+        let cursor = doc.cursor(view.id);
         let res = view.screen_coords_at_pos(doc, text, cursor);
         self.set(res);
         res

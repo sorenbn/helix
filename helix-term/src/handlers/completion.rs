@@ -93,7 +93,11 @@ fn show_completion(
     // Completions are completed asynchronously and therefore the user could
     //switch document/view or leave insert mode. In all of thoise cases the
     // completion should be discarded
-    if editor.mode != Mode::Insert || view.id != trigger.view || doc.id() != trigger.doc {
+    if !editor.mode.is_text_input()
+        || view.id != trigger.view
+        || doc.id() != trigger.doc
+        || (editor.mode == Mode::Standard && doc.selection(view.id).iter().any(|r| !r.is_empty()))
+    {
         return;
     }
 
@@ -200,7 +204,7 @@ fn clear_completions(cx: &mut commands::Context) {
 fn completion_post_command_hook(
     PostCommand { command, cx }: &mut PostCommand<'_, '_>,
 ) -> anyhow::Result<()> {
-    if cx.editor.mode == Mode::Insert {
+    if cx.editor.mode.is_text_input() {
         if cx.editor.last_completion.is_some() {
             match command {
                 MappableCommand::Static {
@@ -208,7 +212,7 @@ fn completion_post_command_hook(
                     ..
                 } => (),
                 MappableCommand::Static {
-                    name: "delete_char_backward",
+                    name: "delete_char_backward" | "standard_delete_backward",
                     ..
                 } => update_completion_filter(cx, None),
                 _ => clear_completions(cx),
@@ -216,7 +220,14 @@ fn completion_post_command_hook(
         } else {
             let event = match command {
                 MappableCommand::Static {
-                    name: "delete_char_backward" | "delete_word_forward" | "delete_char_forward",
+                    name:
+                        "delete_char_backward"
+                        | "delete_word_forward"
+                        | "delete_char_forward"
+                        | "standard_delete_backward"
+                        | "standard_delete_forward"
+                        | "standard_delete_word_backward"
+                        | "standard_delete_word_forward",
                     ..
                 } => {
                     let (view, doc) = current!(cx.editor);
@@ -246,7 +257,7 @@ pub(super) fn register_hooks(_handlers: &Handlers) {
     register_hook!(move |event: &mut PostCommand<'_, '_>| completion_post_command_hook(event));
 
     register_hook!(move |event: &mut OnModeSwitch<'_, '_>| {
-        if event.old_mode == Mode::Insert {
+        if event.old_mode.is_text_input() {
             event
                 .cx
                 .editor
@@ -254,7 +265,7 @@ pub(super) fn register_hooks(_handlers: &Handlers) {
                 .completions
                 .event(CompletionEvent::Cancel);
             clear_completions(event.cx);
-        } else if event.new_mode == Mode::Insert {
+        } else if event.new_mode.is_text_input() {
             trigger_auto_completion(event.cx.editor, false)
         }
         Ok(())

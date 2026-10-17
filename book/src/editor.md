@@ -29,6 +29,7 @@
 
 | Key | Description | Default |
 |--|--|---------|
+| `default-mode` | Editing mode at startup: `normal` or `standard`. See [Standard mode](./standard-mode.md). | `"normal"` |
 | `scrolloff` | Number of lines of padding around the edge of the screen when scrolling | `5` |
 | `mouse` | Enable mouse mode | `true` |
 | `mouse-yank-register` | Which register to use for mouse yanks. | `*` |
@@ -129,6 +130,7 @@ The `[editor.statusline]` key takes the following sub-keys:
 | `mode.normal` | The text shown in the `mode` element for normal mode | `"NOR"` |
 | `mode.insert` | The text shown in the `mode` element for insert mode | `"INS"` |
 | `mode.select` | The text shown in the `mode` element for select mode | `"SEL"` |
+| `mode.standard` | The text shown in the `mode` element for Standard mode | `"STD"` |
 | `diagnostics` | A list of severities which are displayed for the current buffer | `["warning", "error"]` |
 | `workspace-diagnostics` | A list of severities which are displayed for the workspace | `["warning", "error"]` |
 
@@ -136,7 +138,7 @@ The following statusline elements can be configured:
 
 | Key    | Description |
 | ------ | ----------- |
-| `mode` | The current editor mode (`mode.normal`/`mode.insert`/`mode.select`) |
+| `mode` | The current editor mode (`mode.normal`/`mode.insert`/`mode.select`/`mode.standard`) |
 | `spinner` | A progress spinner indicating LSP activity |
 | `file-name` | The path/name of the opened file |
 | `file-absolute-path` | The absolute path/name of the opened file |
@@ -194,6 +196,7 @@ Valid values for these options are `block`, `bar`, `underline`, or `hidden`.
 | `normal` | Cursor shape in [normal mode][normal mode] | `"block"` |
 | `insert` | Cursor shape in [insert mode][insert mode] | `"block"` |
 | `select` | Cursor shape in [select mode][select mode] | `"block"` |
+| `standard` | Cursor shape in [Standard mode](./standard-mode.md) | `"bar"` |
 
 [normal mode]: ./keymap.md#normal-mode
 [insert mode]: ./keymap.md#insert-mode

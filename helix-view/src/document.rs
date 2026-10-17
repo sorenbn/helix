@@ -40,7 +40,8 @@ use helix_core::{
     indent::{auto_detect_indent_style, IndentStyle},
     line_ending::auto_detect_line_ending,
     syntax::{self, config::LanguageConfiguration},
-    ChangeSet, Diagnostic, LineEnding, Range, Rope, RopeBuilder, Selection, Syntax, Transaction,
+    ChangeSet, Diagnostic, LineEnding, Range, Rope, RopeBuilder, RopeSlice, Selection, Syntax,
+    Transaction,
 };
 
 use crate::{
@@ -66,6 +67,21 @@ pub enum Mode {
     Normal = 0,
     Select = 1,
     Insert = 2,
+    Standard = 3,
+}
+
+impl Mode {
+    pub fn is_text_input(self) -> bool {
+        matches!(self, Self::Insert | Self::Standard)
+    }
+
+    pub fn cursor(self, range: Range, text: RopeSlice) -> usize {
+        if self == Self::Standard {
+            range.head
+        } else {
+            range.cursor(text)
+        }
+    }
 }
 
 impl Display for Mode {
@@ -74,6 +90,7 @@ impl Display for Mode {
             Mode::Normal => f.write_str("normal"),
             Mode::Select => f.write_str("select"),
             Mode::Insert => f.write_str("insert"),
+            Mode::Standard => f.write_str("standard"),
         }
     }
 }
@@ -86,6 +103,7 @@ impl FromStr for Mode {
             "normal" => Ok(Mode::Normal),
             "select" => Ok(Mode::Select),
             "insert" => Ok(Mode::Insert),
+            "standard" => Ok(Mode::Standard),
             _ => bail!("Invalid mode '{}'", s),
         }
     }
@@ -142,6 +160,7 @@ pub struct Document {
     pub(crate) id: DocumentId,
     text: Rope,
     selections: HashMap<ViewId, Selection>,
+    caret_mode: bool,
     view_data: HashMap<ViewId, ViewData>,
     pub active_snippet: Option<ActiveSnippet>,
 
@@ -740,6 +759,7 @@ impl Document {
             has_bom,
             text,
             selections: HashMap::default(),
+            caret_mode: false,
             inlay_hints: HashMap::default(),
             inlay_hints_oudated: false,
             view_data: Default::default(),
@@ -1395,8 +1415,10 @@ impl Document {
     /// Select text within the [`Document`].
     pub fn set_selection(&mut self, view_id: ViewId, selection: Selection) {
         // TODO: use a transaction?
-        self.selections
-            .insert(view_id, selection.ensure_invariants(self.text().slice(..)));
+        self.selections.insert(
+            view_id,
+            selection.ensure_invariants_with_min_width(self.text().slice(..), !self.caret_mode),
+        );
         helix_event::dispatch(SelectionDidChange {
             doc: self,
             view: view_id,
@@ -1407,11 +1429,44 @@ impl Document {
     /// a single cursor would go if it were on the first grapheme. If
     /// the text is empty, returns (0, 0).
     pub fn origin(&self) -> Range {
-        if self.text().len_chars() == 0 {
+        if self.caret_mode || self.text().len_chars() == 0 {
             return Range::new(0, 0);
         }
 
         Range::new(0, 1).grapheme_aligned(self.text().slice(..))
+    }
+
+    pub fn cursor(&self, view_id: ViewId) -> usize {
+        let range = self.selection(view_id).primary();
+        if self.caret_mode {
+            range.head
+        } else {
+            range.cursor(self.text().slice(..))
+        }
+    }
+
+    pub(crate) fn normalize_selection(&self, selection: Selection) -> Selection {
+        selection.ensure_invariants_with_min_width(self.text.slice(..), !self.caret_mode)
+    }
+
+    pub(crate) fn set_caret_mode(&mut self, enabled: bool) {
+        if self.caret_mode == enabled {
+            return;
+        }
+        self.caret_mode = enabled;
+        let text = self.text.slice(..);
+        for selection in self.selections.values_mut() {
+            *selection = if enabled {
+                selection
+                    .clone()
+                    .transform(|r| Range::point(r.cursor(text)))
+            } else {
+                selection.clone().ensure_invariants(text)
+            };
+        }
+        if enabled {
+            self.restore_cursor = false;
+        }
     }
 
     /// Reset the view's selection on this document to the
@@ -1467,7 +1522,9 @@ impl Document {
             if let Some(selection) = transaction.selection() {
                 self.selections.insert(
                     view_id,
-                    selection.clone().ensure_invariants(self.text.slice(..)),
+                    selection
+                        .clone()
+                        .ensure_invariants_with_min_width(self.text.slice(..), !self.caret_mode),
                 );
                 helix_event::dispatch(SelectionDidChange {
                     doc: self,
@@ -1486,7 +1543,7 @@ impl Document {
                 // Map through changes
                 .map(transaction.changes())
                 // Ensure all selections across all views still adhere to invariants.
-                .ensure_invariants(self.text.slice(..));
+                .ensure_invariants_with_min_width(self.text.slice(..), !self.caret_mode);
         }
 
         for view_data in self.view_data.values_mut() {
@@ -1631,7 +1688,9 @@ impl Document {
         if let Some(selection) = transaction.selection() {
             self.selections.insert(
                 view_id,
-                selection.clone().ensure_invariants(self.text.slice(..)),
+                selection
+                    .clone()
+                    .ensure_invariants_with_min_width(self.text.slice(..), !self.caret_mode),
             );
             helix_event::dispatch(SelectionDidChange {
                 doc: self,

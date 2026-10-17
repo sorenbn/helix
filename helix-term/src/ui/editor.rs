@@ -44,6 +44,14 @@ pub struct EditorView {
     spinners: ProgressSpinners,
     /// Tracks if the terminal window is focused by reaction to terminal focus events
     terminal_focused: bool,
+    standard_edit: Option<StandardEdit>,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum StandardEdit {
+    Insert,
+    DeleteBackward,
+    DeleteForward,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +75,7 @@ impl EditorView {
             completion: None,
             spinners: ProgressSpinners::default(),
             terminal_focused: true,
+            standard_edit: None,
         }
     }
 
@@ -95,11 +104,19 @@ impl EditorView {
         let mut decorations = DecorationManager::default();
 
         if is_focused && config.cursorline {
-            decorations.add_decoration(Self::cursorline(doc, view, theme));
+            decorations.add_decoration(Self::cursorline(editor.mode, doc, view, theme));
         }
 
         if is_focused && config.cursorcolumn {
-            Self::highlight_cursorcolumn(doc, view, surface, theme, inner, &text_annotations);
+            Self::highlight_cursorcolumn(
+                editor.mode,
+                doc,
+                view,
+                surface,
+                theme,
+                inner,
+                &text_annotations,
+            );
         }
 
         // Set DAP highlights, if needed.
@@ -162,7 +179,9 @@ impl EditorView {
                 &config.cursor_shape,
                 self.terminal_focused,
             ));
-            if let Some(overlay) = Self::highlight_focused_view_elements(view, doc, theme) {
+            if let Some(overlay) =
+                Self::highlight_focused_view_elements(editor.mode, view, doc, theme)
+            {
                 overlays.push(overlay);
             }
         }
@@ -182,10 +201,9 @@ impl EditorView {
 
         Self::render_rulers(editor, doc, view, inner, surface, theme);
 
-        let primary_cursor = doc
-            .selection(view.id)
-            .primary()
-            .cursor(doc.text().slice(..));
+        let primary_cursor = editor
+            .mode
+            .cursor(doc.selection(view.id).primary(), doc.text().slice(..));
         if is_focused {
             decorations.add_decoration(text_decorations::Cursor {
                 cache: &editor.cursor_cache,
@@ -232,7 +250,7 @@ impl EditorView {
         if config.inline_diagnostics.disabled()
             && config.end_of_line_diagnostics == DiagnosticFilter::Disable
         {
-            Self::render_diagnostics(doc, view, inner, surface, theme);
+            Self::render_diagnostics(editor.mode, doc, view, inner, surface, theme);
         }
 
         let statusline_area = view
@@ -559,6 +577,9 @@ impl EditorView {
 
         let cursor_scope = match mode {
             Mode::Insert => theme.find_highlight_exact("ui.cursor.insert"),
+            Mode::Standard => theme
+                .find_highlight_exact("ui.cursor.standard")
+                .or_else(|| theme.find_highlight_exact("ui.cursor.insert")),
             Mode::Select => theme.find_highlight_exact("ui.cursor.select"),
             Mode::Normal => theme.find_highlight_exact("ui.cursor.normal"),
         }
@@ -566,6 +587,9 @@ impl EditorView {
 
         let primary_cursor_scope = match mode {
             Mode::Insert => theme.find_highlight_exact("ui.cursor.primary.insert"),
+            Mode::Standard => theme
+                .find_highlight_exact("ui.cursor.primary.standard")
+                .or_else(|| theme.find_highlight_exact("ui.cursor.primary.insert")),
             Mode::Select => theme.find_highlight_exact("ui.cursor.primary.select"),
             Mode::Normal => theme.find_highlight_exact("ui.cursor.primary.normal"),
         }
@@ -579,6 +603,21 @@ impl EditorView {
             } else {
                 (cursor_scope, selection_scope)
             };
+
+            if mode == Mode::Standard {
+                if !range.is_empty() {
+                    spans.push((selection_scope, range.from()..range.to()));
+                }
+                if !selection_is_primary || (cursor_is_block && is_terminal_focused) {
+                    let end = if range.head == text.len_chars() {
+                        range.head + 1
+                    } else {
+                        next_grapheme_boundary(text, range.head)
+                    };
+                    spans.push((cursor_scope, range.head..end));
+                }
+                continue;
+            }
 
             // Special-case: cursor at end of the rope.
             if range.head == range.anchor && range.head == text.len_chars() {
@@ -636,6 +675,7 @@ impl EditorView {
 
     /// Render brace match, etc (meant for the focused view only)
     pub fn highlight_focused_view_elements(
+        mode: Mode,
         view: &View,
         doc: &Document,
         theme: &Theme,
@@ -644,7 +684,7 @@ impl EditorView {
         let syntax = doc.syntax()?;
         let highlight = theme.find_highlight_exact("ui.cursor.match")?;
         let text = doc.text().slice(..);
-        let pos = doc.selection(view.id).primary().cursor(text);
+        let pos = mode.cursor(doc.selection(view.id).primary(), text);
         let pos = helix_core::match_brackets::find_matching_bracket(syntax, text, pos)?;
         Some(OverlayHighlights::single(highlight, pos..pos + 1))
     }
@@ -725,7 +765,7 @@ impl EditorView {
         let cursors: Rc<[_]> = doc
             .selection(view.id)
             .iter()
-            .map(|range| range.cursor_line(text))
+            .map(|range| text.char_to_line(editor.mode.cursor(*range, text)))
             .collect();
 
         let mut offset = 0;
@@ -778,6 +818,7 @@ impl EditorView {
     }
 
     pub fn render_diagnostics(
+        mode: Mode,
         doc: &Document,
         view: &View,
         viewport: Rect,
@@ -791,10 +832,7 @@ impl EditorView {
             widgets::{Paragraph, Widget, Wrap},
         };
 
-        let cursor = doc
-            .selection(view.id)
-            .primary()
-            .cursor(doc.text().slice(..));
+        let cursor = mode.cursor(doc.selection(view.id).primary(), doc.text().slice(..));
 
         let diagnostics = doc.diagnostics().iter().filter(|diagnostic| {
             diagnostic.range.start <= cursor && diagnostic.range.end >= cursor
@@ -841,10 +879,10 @@ impl EditorView {
     }
 
     /// Apply the highlighting on the lines where a cursor is active
-    pub fn cursorline(doc: &Document, view: &View, theme: &Theme) -> impl Decoration {
+    pub fn cursorline(mode: Mode, doc: &Document, view: &View, theme: &Theme) -> impl Decoration {
         let text = doc.text().slice(..);
         // TODO only highlight the visual line that contains the cursor instead of the full visual line
-        let primary_line = doc.selection(view.id).primary().cursor_line(text);
+        let primary_line = text.char_to_line(mode.cursor(doc.selection(view.id).primary(), text));
 
         // The secondary_lines do contain the primary_line, it doesn't matter
         // as the else-if clause in the loop later won't test for the
@@ -855,7 +893,7 @@ impl EditorView {
         let secondary_lines: Vec<_> = doc
             .selection(view.id)
             .iter()
-            .map(|range| range.cursor_line(text))
+            .map(|range| text.char_to_line(mode.cursor(*range, text)))
             .collect();
 
         let primary_style = theme.get("ui.cursorline.primary");
@@ -874,6 +912,7 @@ impl EditorView {
 
     /// Apply the highlighting on the columns where a cursor is active
     pub fn highlight_cursorcolumn(
+        mode: Mode,
         doc: &Document,
         view: &View,
         surface: &mut Surface,
@@ -902,7 +941,7 @@ impl EditorView {
         let text_format = doc.text_format(viewport.width, None);
         for range in selection.iter() {
             let is_primary = primary == *range;
-            let cursor = range.cursor(text);
+            let cursor = mode.cursor(*range, text);
 
             let Position { col, .. } =
                 visual_offset_from_block(text, cursor, cursor, &text_format, text_annotations).0;
@@ -1008,6 +1047,56 @@ impl EditorView {
                 _ => unreachable!(),
             }
         }
+    }
+
+    fn standard_input(&mut self, cx: &mut commands::Context, event: KeyEvent) {
+        let kind = if commands::standard::text_char(event).is_some() {
+            Some(StandardEdit::Insert)
+        } else {
+            match event {
+                key!(Backspace) => Some(StandardEdit::DeleteBackward),
+                key!(Delete) => Some(StandardEdit::DeleteForward),
+                _ => None,
+            }
+        };
+        let (view, doc) = current_ref!(cx.editor);
+        let standalone = kind.is_none() || doc.selection(view.id).iter().any(|r| !r.is_empty());
+        if standalone || self.standard_edit != kind {
+            commands::standard::checkpoint(cx);
+        }
+        if let Some(result) = self.handle_keymap_event(Mode::Standard, cx, event) {
+            let events = match result {
+                KeymapResult::NotFound => {
+                    if self.on_next_key(OnKeyCallbackKind::Fallback, cx, event) {
+                        Vec::new()
+                    } else {
+                        vec![event]
+                    }
+                }
+                KeymapResult::Cancelled(mut pending) => {
+                    pending.retain(|&key| commands::standard::text_char(key).is_some());
+                    if commands::standard::text_char(event).is_none() && event != key!(Esc) {
+                        pending.push(event);
+                    }
+                    pending
+                }
+                _ => Vec::new(),
+            };
+            for event in events {
+                if let Some(ch) = commands::standard::text_char(event) {
+                    commands::standard::insert_character(cx, ch);
+                } else {
+                    self.handle_keymap_event(Mode::Standard, cx, event);
+                }
+                if cx.editor.should_close() {
+                    break;
+                }
+            }
+        }
+        if standalone {
+            commands::standard::checkpoint(cx);
+        }
+        self.standard_edit = if standalone { None } else { kind };
     }
 
     fn command_mode(&mut self, mode: Mode, cxt: &mut commands::Context, event: KeyEvent) {
@@ -1205,6 +1294,10 @@ impl EditorView {
         cxt: &mut commands::Context,
     ) -> EventResult {
         if event.kind != MouseEventKind::Moved {
+            if cxt.editor.mode == Mode::Standard {
+                commands::standard::checkpoint(cxt);
+                self.standard_edit = None;
+            }
             self.handle_non_key_input(cxt)
         }
 
@@ -1249,6 +1342,11 @@ impl EditorView {
                     if modifiers == KeyModifiers::ALT {
                         let selection = doc.selection(view_id).clone();
                         doc.set_selection(view_id, selection.push(Range::point(pos)));
+                    } else if editor.mode == Mode::Standard
+                        && modifiers.contains(KeyModifiers::SHIFT)
+                    {
+                        let primary = doc.selection(view_id).primary();
+                        doc.set_selection(view_id, Selection::single(primary.anchor, pos));
                     } else if editor.mode == Mode::Select {
                         // Discards non-primary selections for consistent UX with normal mode
                         let primary = doc.selection(view_id).primary().put_cursor(
@@ -1302,7 +1400,11 @@ impl EditorView {
 
                 let mut selection = doc.selection(view.id).clone();
                 let primary = selection.primary_mut();
-                *primary = primary.put_cursor(doc.text().slice(..), pos, true);
+                *primary = if cxt.editor.mode == Mode::Standard {
+                    Range::new(primary.anchor, pos)
+                } else {
+                    primary.put_cursor(doc.text().slice(..), pos, true)
+                };
                 doc.set_selection(view.id, selection);
                 let view_id = view.id;
                 cxt.editor.ensure_cursor_in_view(view_id);
@@ -1463,6 +1565,7 @@ impl Component for EditorView {
 
         match event {
             Event::Paste(contents) => {
+                self.standard_edit = None;
                 self.handle_non_key_input(&mut cx);
                 cx.count = cx.editor.count;
                 commands::paste_bracketed_value(&mut cx, contents.clone());
@@ -1473,9 +1576,8 @@ impl Component for EditorView {
                 let (view, doc) = current!(cx.editor);
                 view.ensure_cursor_in_view(doc, config.scrolloff);
 
-                // Store a history state if not in insert mode. Otherwise wait till we exit insert
-                // to include any edits to the paste in the history state.
-                if mode != Mode::Insert {
+                // Text input modes manage their own undo boundaries.
+                if !mode.is_text_input() {
                     doc.append_changes_to_history(view);
                 }
 
@@ -1497,7 +1599,7 @@ impl Component for EditorView {
 
                 if !self.on_next_key(OnKeyCallbackKind::PseudoPending, &mut cx, key) {
                     match mode {
-                        Mode::Insert => {
+                        Mode::Insert | Mode::Standard => {
                             // let completion swallow the event if necessary
                             let mut consumed = false;
                             if let Some(completion) = &mut self.completion {
@@ -1541,10 +1643,12 @@ impl Component for EditorView {
 
                             // if completion didn't take the event, we pass it onto commands
                             if !consumed {
-                                self.insert_mode(&mut cx, key);
-
-                                // record last_insert key
-                                self.last_insert.1.push(InsertEvent::Key(key));
+                                if mode == Mode::Standard {
+                                    self.standard_input(&mut cx, key);
+                                } else {
+                                    self.insert_mode(&mut cx, key);
+                                    self.last_insert.1.push(InsertEvent::Key(key));
+                                }
                             }
                         }
                         mode => self.command_mode(mode, &mut cx, key),
@@ -1572,9 +1676,8 @@ impl Component for EditorView {
 
                 view.ensure_cursor_in_view(doc, config.scrolloff);
 
-                // Store a history state if not in insert mode. This also takes care of
-                // committing changes when leaving insert mode.
-                if mode != Mode::Insert {
+                // Text input modes manage their own undo boundaries.
+                if !mode.is_text_input() {
                     doc.append_changes_to_history(view);
                 }
                 let callback = if callbacks.is_empty() {
@@ -1598,6 +1701,10 @@ impl Component for EditorView {
                 EventResult::Consumed(None)
             }
             Event::FocusLost => {
+                if cx.editor.mode == Mode::Standard {
+                    commands::standard::checkpoint(&mut cx);
+                    self.standard_edit = None;
+                }
                 if context.editor.config().auto_save.focus_lost {
                     let options = commands::WriteAllOptions {
                         force: false,

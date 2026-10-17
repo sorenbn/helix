@@ -170,7 +170,12 @@ pub async fn test_key_sequences(
     }
 
     if !should_exit {
-        for key_event in parse_macro("<esc>:q!<ret>")?.into_iter() {
+        let quit = if app.editor.mode() == helix_view::document::Mode::Standard {
+            "<F6>:qa!<ret>"
+        } else {
+            "<esc>:q!<ret>"
+        };
+        for key_event in parse_macro(quit)?.into_iter() {
             tx.send(Ok(Event::Key(KeyEvent::from(key_event))))?;
         }
 

@@ -162,7 +162,7 @@ pub fn line_numbers<'doc>(
 
     let current_line = doc
         .text()
-        .char_to_line(doc.selection(view.id).primary().cursor(text));
+        .char_to_line(editor.mode.cursor(doc.selection(view.id).primary(), text));
 
     let line_number = editor.config().line_number;
     let mode = editor.mode;
@@ -173,10 +173,10 @@ pub fn line_numbers<'doc>(
                 write!(out, "{:>1$}", '~', width).unwrap();
                 Some(linenr)
             } else {
-                use crate::{document::Mode, editor::LineNumber};
+                use crate::editor::LineNumber;
 
                 let relative = line_number == LineNumber::Relative
-                    && mode != Mode::Insert
+                    && !mode.is_text_input()
                     && is_focused
                     && current_line != line;
 
@@ -328,7 +328,7 @@ pub fn diagnostics_or_breakpoints<'doc>(
 }
 
 pub fn code_action_hint<'doc>(
-    _editor: &'doc Editor,
+    editor: &'doc Editor,
     doc: &'doc Document,
     view: &View,
     theme: &Theme,
@@ -339,7 +339,7 @@ pub fn code_action_hint<'doc>(
     let show_hint = doc.code_action_hints(view.id);
     let current_line = doc
         .text()
-        .char_to_line(doc.selection(view.id).primary().cursor(text));
+        .char_to_line(editor.mode.cursor(doc.selection(view.id).primary(), text));
 
     Box::new(
         move |line: usize, _selected: bool, first_visual_line: bool, out: &mut String| {

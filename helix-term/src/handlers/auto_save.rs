@@ -81,6 +81,10 @@ impl helix_event::AsyncHook for AutoSaveHandler {
 }
 
 fn request_auto_save(editor: &mut Editor) {
+    if editor.mode() == Mode::Standard {
+        let (view, doc) = helix_view::current!(editor);
+        doc.append_changes_to_history(view);
+    }
     let context = &mut compositor::Context {
         editor,
         scroll: Some(0),

@@ -13,6 +13,7 @@
   - [Pickers](./pickers.md)
   - [Jumplist](./jumplist.md)
   - [Keymap](./keymap.md)
+  - [Standard mode](./standard-mode.md)
   - [Command line](./command-line.md)
   - [Commands](./commands.md)
   - [Language servers](./lsp.md)

@@ -20,7 +20,7 @@ use helix_core::{
 use helix_stdx::path;
 use helix_view::{
     action::Action as CodeActionItem,
-    document::{DocumentInlayHints, DocumentInlayHintsId},
+    document::{DocumentInlayHints, DocumentInlayHintsId, Mode},
     editor::Action,
     handlers::lsp::SignatureHelpInvoked,
     theme::Style,
@@ -140,6 +140,7 @@ fn jump_to_position(
     offset_encoding: OffsetEncoding,
     action: Action,
 ) {
+    let standard = editor.mode() == Mode::Standard;
     let doc = match editor.open(path, action) {
         Ok(id) => doc_mut!(editor, &id),
         Err(err) => {
@@ -157,9 +158,13 @@ fn jump_to_position(
         log::warn!("lsp position out of bounds - {:?}", range);
         return;
     };
-    // we flip the range so that the cursor sits on the start of the symbol
-    // (for example start of the function).
-    doc.set_selection(view.id, Selection::single(new_range.head, new_range.anchor));
+    let selection = if standard {
+        Selection::point(new_range.anchor)
+    } else {
+        // Reverse the range so the cursor sits at the start of the symbol.
+        Selection::single(new_range.head, new_range.anchor)
+    };
+    doc.set_selection(view.id, selection);
     if action.align_view(view, doc.id()) {
         align_view(doc, view, Align::Center);
     }
@@ -1514,4 +1519,73 @@ fn compute_inlay_hints_for_view(
     );
 
     Some(callback)
+}
+
+#[cfg(all(test, feature = "integration"))]
+mod tests {
+    use super::*;
+    use crate::{application::Application, args::Args, config::Config};
+    use helix_core::Position;
+    use helix_loader::workspace_trust::WorkspaceTrust;
+    use helix_view::editor::DefaultMode;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn location_jump_preserves_mode_caret_and_return_location() -> anyhow::Result<()> {
+        let caller = tempfile::NamedTempFile::new()?;
+        let target = tempfile::NamedTempFile::new()?;
+        std::fs::write(caller.path(), "target();")?;
+        let source = "// é👩‍💻\nfn target() {}\n";
+        std::fs::write(target.path(), source)?;
+        let symbol_start = source.chars().position(|ch| ch == '\n').unwrap() + 4;
+        for (mode, default_mode) in [
+            (Mode::Standard, DefaultMode::Standard),
+            (Mode::Normal, DefaultMode::Normal),
+        ] {
+            let mut config = Config::default();
+            config.editor.default_mode = default_mode;
+            config.editor.lsp.enable = false;
+            config.editor.word_completion.enable = false;
+            let mut args = Args::default();
+            args.files
+                .insert(caller.path().to_owned(), vec![Position::default()]);
+            let mut app = Application::new(
+                args,
+                config,
+                helix_core::config::default_lang_loader(),
+                WorkspaceTrust::fully_trusted(),
+            )?;
+            let view = app.editor.tree.focus;
+            let caller_selection = if mode == Mode::Standard {
+                Selection::point(2)
+            } else {
+                Selection::single(2, 3)
+            };
+            doc_mut!(app.editor).set_selection(view, caller_selection.clone());
+            let caller_id = doc!(app.editor).id();
+            jump_to_location(
+                &mut app.editor,
+                &Location {
+                    uri: target.path().into(),
+                    range: lsp::Range::new(lsp::Position::new(1, 3), lsp::Position::new(1, 9)),
+                    offset_encoding: OffsetEncoding::Utf16,
+                },
+                Action::Replace,
+            );
+            assert_eq!(app.editor.mode(), mode);
+            let doc = doc!(app.editor);
+            assert_ne!(doc.id(), caller_id);
+            let expected = if mode == Mode::Standard {
+                Selection::point(symbol_start)
+            } else {
+                Selection::single(symbol_start + 6, symbol_start)
+            };
+            assert_eq!(doc.selection(view), &expected);
+            app.editor.jump_backward(view, 1);
+            assert_eq!(app.editor.mode(), mode);
+            assert_eq!(doc!(app.editor).id(), caller_id);
+            assert_eq!(doc!(app.editor).selection(view), &caller_selection);
+            assert!(app.close().await.is_empty());
+        }
+        Ok(())
+    }
 }

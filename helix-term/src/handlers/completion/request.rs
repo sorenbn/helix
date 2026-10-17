@@ -11,7 +11,7 @@ use helix_lsp::lsp;
 use helix_lsp::lsp::{CompletionContext, CompletionTriggerKind};
 use helix_lsp::util::pos_to_lsp_pos;
 use helix_stdx::rope::RopeSliceExt;
-use helix_view::document::{Mode, SavePoint};
+use helix_view::document::SavePoint;
 use helix_view::handlers::completion::{CompletionEvent, ResponseContext};
 use helix_view::{Document, DocumentId, Editor, ViewId};
 use tokio::task::JoinSet;
@@ -171,7 +171,7 @@ fn request_completions(
         .unwrap()
         .completion
         .is_some()
-        || editor.mode != Mode::Insert
+        || !editor.mode.is_text_input()
     {
         return;
     }

@@ -1,5 +1,7 @@
 pub(crate) mod dap;
 pub(crate) mod lsp;
+pub(crate) mod standard;
+use standard::*;
 pub(crate) mod syntax;
 pub(crate) mod typed;
 
@@ -201,7 +203,7 @@ where
 use helix_view::{align_view, Align};
 
 /// MappableCommands are commands that can be bound to keys, executable in
-/// normal, insert or select mode.
+/// any editor mode.
 ///
 /// There are three kinds:
 ///
@@ -304,6 +306,55 @@ impl MappableCommand {
     #[rustfmt::skip]
     static_commands!(
         no_op, "Do nothing",
+        standard_mode, "Enter standard editing mode",
+        standard_left, "Move caret left",
+        standard_right, "Move caret right",
+        standard_up, "Move caret up",
+        standard_down, "Move caret down",
+        standard_move_lines_up, "Move current or selected lines up",
+        standard_move_lines_down, "Move current or selected lines down",
+        standard_ten_lines_up, "Move caret ten source lines up",
+        standard_ten_lines_down, "Move caret ten source lines down",
+        standard_select_ten_lines_up, "Extend selection ten source lines up",
+        standard_select_ten_lines_down, "Extend selection ten source lines down",
+        standard_section_up, "Move caret to previous function, class or section boundary",
+        standard_section_down, "Move caret to next function, class or section boundary",
+        standard_select_section_up, "Extend selection to previous function, class or section boundary",
+        standard_select_section_down, "Extend selection to next function, class or section boundary",
+        standard_select_left, "Extend selection left",
+        standard_select_right, "Extend selection right",
+        standard_select_up, "Extend selection up",
+        standard_select_down, "Extend selection down",
+        standard_word_left, "Move caret to previous word",
+        standard_word_right, "Move caret to next word",
+        standard_select_word_left, "Extend selection to previous word",
+        standard_select_word_right, "Extend selection to next word",
+        standard_home, "Move caret to line start",
+        standard_end, "Move caret to line end",
+        standard_select_home, "Extend selection to line start",
+        standard_select_end, "Extend selection to line end",
+        standard_file_start, "Move caret to document start",
+        standard_file_end, "Move caret to document end",
+        standard_select_file_start, "Extend selection to document start",
+        standard_select_file_end, "Extend selection to document end",
+        standard_page_up, "Move caret one page up",
+        standard_page_down, "Move caret one page down",
+        standard_select_page_up, "Extend selection one page up",
+        standard_select_page_down, "Extend selection one page down",
+        standard_select_all, "Select the document",
+        standard_escape, "Clear selection",
+        standard_delete_backward, "Delete selection or previous grapheme",
+        standard_delete_forward, "Delete selection or next grapheme",
+        standard_delete_word_backward, "Delete selection or previous word",
+        standard_delete_word_forward, "Delete selection or next word",
+        standard_copy, "Copy selected text to clipboard",
+        standard_cut, "Cut selected text or current lines to clipboard",
+        standard_paste, "Replace selected text with clipboard",
+        standard_newline, "Replace selection with an indented newline",
+        standard_tab, "Insert indentation or indent selected lines",
+        standard_unindent, "Unindent selected lines",
+        standard_comment, "Comment current or selected lines",
+        standard_uncomment, "Uncomment current or selected lines",
         move_char_left, "Move left",
         move_char_right, "Move right",
         move_line_up, "Move up",
@@ -3113,7 +3164,7 @@ fn ensure_selections_forward(cx: &mut Context) {
 }
 
 fn enter_insert_mode(cx: &mut Context) {
-    cx.editor.mode = Mode::Insert;
+    cx.editor.set_mode(Mode::Insert);
 }
 
 // inserts at the start of each selection
@@ -4134,12 +4185,12 @@ fn select_mode(cx: &mut Context) {
     });
     doc.set_selection(view.id, selection);
 
-    cx.editor.mode = Mode::Select;
+    cx.editor.set_mode(Mode::Select);
 }
 
 fn exit_select_mode(cx: &mut Context) {
     if cx.editor.mode == Mode::Select {
-        cx.editor.mode = Mode::Normal;
+        cx.editor.set_mode(Mode::Normal);
     }
 }
 
@@ -4469,7 +4520,7 @@ pub mod insert {
                 _ => (),
             };
             // Restore the old mode.
-            cx.editor.mode = old_mode;
+            cx.editor.set_mode(old_mode);
         });
     }
 
@@ -4685,6 +4736,7 @@ pub mod insert {
 
     pub fn delete_char_backward(cx: &mut Context) {
         let count = cx.count();
+        let caret_mode = cx.editor.mode == Mode::Standard;
         let (view, doc) = current_ref!(cx.editor);
         let text = doc.text().slice(..);
 
@@ -4708,8 +4760,21 @@ pub mod insert {
                     .or_else(|| {
                         // [TODO] should this be fixed to get the auto pairs for
                         // each selection after 46af40017c0704142516b5740cf1a000ba4fd7c1 ?
-                        auto_pairs::hook_delete(doc.text(), range, auto_pairs?)
-                            .map(|(delete, new_range)| (delete, Some(new_range)))
+                        let cursor_range = if caret_mode {
+                            range.min_width_1(text)
+                        } else {
+                            *range
+                        };
+                        auto_pairs::hook_delete(doc.text(), &cursor_range, auto_pairs?).map(
+                            |(delete, new_range)| {
+                                let range = if caret_mode {
+                                    Range::point(new_range.from())
+                                } else {
+                                    new_range
+                                };
+                                (delete, Some(range))
+                            },
+                        )
                     })
                     .unwrap_or_else(|| {
                         (
@@ -5022,9 +5087,13 @@ fn paste_impl(
 }
 
 pub(crate) fn paste_bracketed_value(cx: &mut Context, contents: String) {
+    if cx.editor.mode == Mode::Standard {
+        standard::paste_text(cx, &contents);
+        return;
+    }
     let count = cx.count();
     let paste = match cx.editor.mode {
-        Mode::Insert | Mode::Select => Paste::Cursor,
+        Mode::Insert | Mode::Select | Mode::Standard => Paste::Cursor,
         Mode::Normal => Paste::Before,
     };
     let (view, doc) = current!(cx.editor);
@@ -5504,13 +5573,11 @@ type CommentTransactionFn = fn(
     selection: &Selection,
 ) -> Transaction;
 
-fn toggle_comments_impl(cx: &mut Context, comment_transaction: CommentTransactionFn) {
-    let loader: &helix_core::syntax::Loader = &cx.editor.syn_loader.load();
-    let (view, doc) = current!(cx.editor);
-    let cursor = doc
-        .selection(view.id)
-        .primary()
-        .cursor(doc.text().slice(..));
+fn comment_tokens<'a>(
+    doc: &'a Document,
+    loader: &'a helix_core::syntax::Loader,
+    cursor: usize,
+) -> (Option<&'a [String]>, Option<&'a [BlockCommentToken]>) {
     let byte_pos = doc.text().char_to_byte(cursor);
     // Resolve the comment tokens from the enclosing injection layer that owns the comment,
     // not the innermost layer at the cursor. Prefer the innermost layer that defines
@@ -5534,18 +5601,28 @@ fn toggle_comments_impl(cx: &mut Context, comment_transaction: CommentTransactio
         .map(|language| &**loader.language(language).config())
         .or_else(|| doc.language_config());
 
+    (
+        lang_config.and_then(|lc| lc.comment_tokens.as_deref()),
+        lang_config.and_then(|lc| lc.block_comment_tokens.as_deref()),
+    )
+}
+
+fn toggle_comments_impl(cx: &mut Context, comment_transaction: CommentTransactionFn) {
+    let loader: &helix_core::syntax::Loader = &cx.editor.syn_loader.load();
+    let (view, doc) = current!(cx.editor);
+    let cursor = doc
+        .selection(view.id)
+        .primary()
+        .cursor(doc.text().slice(..));
+    let (line_tokens, block_tokens) = comment_tokens(doc, loader, cursor);
+
     // Pick the token the cursor's line is already commented with (longest match, so `///` wins over `//`).
     // If the line isn't commented yet, fall back to the primary token for adding a comment.
     let cursor_line = doc.text().char_to_line(cursor);
-    let line_token: Option<&str> = lang_config
-        .and_then(|lc| lc.comment_tokens.as_ref())
-        .and_then(|tokens| {
-            comment::get_comment_token(doc.text().slice(..), tokens, cursor_line)
-                .or_else(|| tokens.first().map(|token| token.as_str()))
-        });
-    let block_tokens: Option<&[BlockCommentToken]> = lang_config
-        .and_then(|lc| lc.block_comment_tokens.as_ref())
-        .map(|tc| &tc[..]);
+    let line_token: Option<&str> = line_tokens.and_then(|tokens| {
+        comment::get_comment_token(doc.text().slice(..), tokens, cursor_line)
+            .or_else(|| tokens.first().map(|token| token.as_str()))
+    });
 
     let transaction =
         comment_transaction(line_token, block_tokens, doc.text(), doc.selection(view.id));

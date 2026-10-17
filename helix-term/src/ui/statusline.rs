@@ -172,6 +172,7 @@ where
         Mode::Insert => &modenames.insert,
         Mode::Select => &modenames.select,
         Mode::Normal => &modenames.normal,
+        Mode::Standard => &modenames.standard,
     };
     let content = if visible {
         format!(" {mode_str} ")
@@ -184,6 +185,11 @@ where
             Mode::Insert => context.editor.theme.get("ui.statusline.insert"),
             Mode::Select => context.editor.theme.get("ui.statusline.select"),
             Mode::Normal => context.editor.theme.get("ui.statusline.normal"),
+            Mode::Standard => context
+                .editor
+                .theme
+                .try_get("ui.statusline.standard")
+                .unwrap_or_else(|| context.editor.theme.get("ui.statusline.insert")),
         }
     } else {
         Style::default()
@@ -358,11 +364,10 @@ where
 fn get_position(context: &RenderContext) -> Position {
     coords_at_pos(
         context.doc.text().slice(..),
-        context
-            .doc
-            .selection(context.view.id)
-            .primary()
-            .cursor(context.doc.text().slice(..)),
+        context.editor.mode().cursor(
+            context.doc.selection(context.view.id).primary(),
+            context.doc.text().slice(..),
+        ),
     )
 }
 

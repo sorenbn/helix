@@ -660,8 +660,26 @@ impl Selection {
     // 3. Ranges are non-overlapping.
     // 4. Ranges are sorted by their position in the text.
     pub fn ensure_invariants(self, text: RopeSlice) -> Self {
-        self.transform(|r| r.min_width_1(text).grapheme_aligned(text))
-            .normalize()
+        self.ensure_invariants_with_min_width(text, true)
+    }
+
+    /// Align ranges to graphemes, optionally expanding empty ranges to a block cursor.
+    pub fn ensure_invariants_with_min_width(self, text: RopeSlice, min_width: bool) -> Self {
+        self.transform(|r| {
+            if min_width {
+                r.min_width_1(text).grapheme_aligned(text)
+            } else if r.is_empty() {
+                let pos = ensure_grapheme_boundary_next(text, r.head);
+                Range {
+                    anchor: pos,
+                    head: pos,
+                    ..r
+                }
+            } else {
+                r.grapheme_aligned(text)
+            }
+        })
+        .normalize()
     }
 
     /// Transforms the selection into all of the left-side head positions,

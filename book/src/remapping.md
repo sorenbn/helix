@@ -30,7 +30,7 @@ this:
 > Within macros, wrap them in `<>`, e.g. `<A-X>` and `<C-X>` to distinguish from the `A` or `C` keys.
 
 ```toml
-# At most one section each of 'keys.normal', 'keys.insert' and 'keys.select'
+# At most one section for each mode: normal, insert, select, standard.
 [keys.normal]
 C-s = ":w" # Maps Ctrl-s to the typable command :w which is an alias for :write (save file)
 C-o = ":open ~/.config/helix/config.toml" # Maps Ctrl-o to opening of the helix config file

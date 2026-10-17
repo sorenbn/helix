@@ -122,14 +122,9 @@ impl JumpList {
     /// This is necessary to ensure that changes to documents do not leave jump-list
     /// selections pointing to parts of the text which no longer exist.
     fn apply(&mut self, transaction: &Transaction, doc: &Document) {
-        let text = doc.text().slice(..);
-
         for (doc_id, selection) in &mut self.jumps {
             if doc.id() == *doc_id {
-                *selection = selection
-                    .clone()
-                    .map(transaction.changes())
-                    .ensure_invariants(text);
+                *selection = doc.normalize_selection(selection.clone().map(transaction.changes()));
             }
         }
     }
@@ -251,6 +246,7 @@ impl View {
         doc: &Document,
         scrolloff: usize,
     ) -> Option<ViewPosition> {
+        let cursor = doc.cursor(self.id);
         let view_offset = doc.get_view_offset(self.id)?;
         let doc_text = doc.text().slice(..);
         let viewport = self.inner_area(doc);
@@ -277,7 +273,6 @@ impl View {
             )
         };
 
-        let cursor = doc.selection(self.id).primary().cursor(doc_text);
         let mut offset = view_offset;
         let off = visual_offset_from_anchor(
             doc_text,
@@ -515,10 +510,7 @@ impl View {
             .show_cursorline_diagnostics(doc, self.id);
         let config = config.inline_diagnostics.prepare(width, enable_cursor_line);
         if !config.disabled() {
-            let cursor = doc
-                .selection(self.id)
-                .primary()
-                .cursor(doc.text().slice(..));
+            let cursor = doc.cursor(self.id);
             text_annotations.add_line_annotation(InlineDiagnostics::new(
                 doc,
                 cursor,
