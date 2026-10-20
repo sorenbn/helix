@@ -28,6 +28,8 @@ pub struct Registers {
     /// efficiently prepend new values in `Registers::push`.
     inner: HashMap<char, Vec<String>>,
     clipboard_provider: Box<dyn DynAccess<ClipboardProvider>>,
+    // Applies only while the system clipboard still matches the saved values.
+    clipboard_linewise: bool,
     pub last_search_register: char,
 }
 
@@ -36,6 +38,7 @@ impl Registers {
         Self {
             inner: Default::default(),
             clipboard_provider,
+            clipboard_linewise: false,
             last_search_register: '/',
         }
     }
@@ -69,6 +72,7 @@ impl Registers {
                     '*' => ClipboardType::Selection,
                     _ => unreachable!(),
                 },
+                name == '+' && self.clipboard_linewise,
             )),
             _ => self
                 .inner
@@ -90,6 +94,9 @@ impl Registers {
                         _ => unreachable!(),
                     },
                 )?;
+                if name == '+' {
+                    self.clipboard_linewise = false;
+                }
                 values.reverse();
                 self.inner.insert(name, values);
                 Ok(())
@@ -100,6 +107,17 @@ impl Registers {
                 Ok(())
             }
         }
+    }
+
+    /// Copy complete lines without adding separators between their line endings.
+    pub fn write_clipboard_lines(&mut self, mut values: Vec<String>) -> Result<()> {
+        self.clipboard_provider
+            .load()
+            .set_contents(&values.concat(), ClipboardType::Clipboard)?;
+        values.reverse();
+        self.inner.insert('+', values);
+        self.clipboard_linewise = true;
+        Ok(())
     }
 
     pub fn push(&mut self, name: char, mut value: String) -> Result<()> {
@@ -118,7 +136,12 @@ impl Registers {
                     .get_contents(&clipboard_type)?;
                 let saved_values = self.inner.entry(name).or_default();
 
-                if !contents_are_saved(saved_values, &contents) {
+                let separator = if name == '+' && self.clipboard_linewise {
+                    ""
+                } else {
+                    NATIVE_LINE_ENDING.as_str()
+                };
+                if !contents_are_saved(saved_values, &contents, separator) {
                     anyhow::bail!("Failed to push to register {name}: clipboard does not match register contents");
                 }
 
@@ -130,6 +153,9 @@ impl Registers {
                 self.clipboard_provider
                     .load()
                     .set_contents(&value, clipboard_type)?;
+                if name == '+' {
+                    self.clipboard_linewise = false;
+                }
 
                 Ok(())
             }
@@ -199,6 +225,9 @@ impl Registers {
     }
 
     fn clear_clipboard(&mut self, clipboard_type: ClipboardType) {
+        if matches!(clipboard_type, ClipboardType::Clipboard) {
+            self.clipboard_linewise = false;
+        }
         if let Err(err) = self
             .clipboard_provider
             .load()
@@ -223,6 +252,7 @@ fn read_from_clipboard<'a>(
     provider: &ClipboardProvider,
     saved_values: Option<&'a Vec<String>>,
     clipboard_type: ClipboardType,
+    linewise: bool,
 ) -> RegisterValues<'a> {
     match provider.get_contents(&clipboard_type) {
         Ok(contents) => {
@@ -233,14 +263,21 @@ fn read_from_clipboard<'a>(
                 return RegisterValues::new(iter::once(contents.into()));
             };
 
-            if contents_are_saved(values, &contents) {
-                RegisterValues::new(values.iter().map(Cow::from).rev())
+            let separator = if linewise {
+                ""
+            } else {
+                NATIVE_LINE_ENDING.as_str()
+            };
+            if contents_are_saved(values, &contents, separator) {
+                RegisterValues::new(values.iter().map(Cow::from).rev()).with_linewise(linewise)
             } else {
                 RegisterValues::new(iter::once(contents.into()))
             }
         }
         Err(ClipboardError::ReadingNotSupported) => match saved_values {
-            Some(values) => RegisterValues::new(values.iter().map(Cow::from).rev()),
+            Some(values) => {
+                RegisterValues::new(values.iter().map(Cow::from).rev()).with_linewise(linewise)
+            }
             None => RegisterValues::new(iter::empty()),
         },
         Err(err) => {
@@ -257,8 +294,7 @@ fn read_from_clipboard<'a>(
     }
 }
 
-fn contents_are_saved(saved_values: &[String], mut contents: &str) -> bool {
-    let line_ending = NATIVE_LINE_ENDING.as_str();
+fn contents_are_saved(saved_values: &[String], mut contents: &str, separator: &str) -> bool {
     let mut values = saved_values.iter().rev();
 
     match values.next() {
@@ -270,14 +306,14 @@ fn contents_are_saved(saved_values: &[String], mut contents: &str) -> bool {
     }
 
     for value in values {
-        if contents.starts_with(line_ending) && contents[line_ending.len()..].starts_with(value) {
-            contents = &contents[line_ending.len() + value.len()..];
+        if contents.starts_with(separator) && contents[separator.len()..].starts_with(value) {
+            contents = &contents[separator.len() + value.len()..];
         } else {
             return false;
         }
     }
 
-    true
+    contents.is_empty()
 }
 
 // This is a wrapper of an iterator that is both double ended and exact size,
@@ -286,6 +322,7 @@ fn contents_are_saved(saved_values: &[String], mut contents: &str) -> bool {
 // values.
 pub struct RegisterValues<'a> {
     iter: Box<dyn DoubleEndedExactSizeIterator<Item = Cow<'a, str>> + 'a>,
+    linewise: bool,
 }
 
 impl<'a> RegisterValues<'a> {
@@ -296,7 +333,18 @@ impl<'a> RegisterValues<'a> {
     ) -> Self {
         Self {
             iter: Box::new(iter),
+            linewise: false,
         }
+    }
+
+    fn with_linewise(mut self, linewise: bool) -> Self {
+        self.linewise = linewise;
+        self
+    }
+
+    /// Whether these values are complete lines copied without a selection.
+    pub fn is_linewise(&self) -> bool {
+        self.linewise
     }
 }
 
@@ -333,3 +381,21 @@ impl ExactSizeIterator for RegisterValues<'_> {
 trait DoubleEndedExactSizeIterator: DoubleEndedIterator + ExactSizeIterator {}
 
 impl<I: DoubleEndedIterator + ExactSizeIterator> DoubleEndedExactSizeIterator for I {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cached_clipboard_requires_an_exact_match() {
+        let values = vec!["second".to_owned(), "first".to_owned()];
+        assert!(contents_are_saved(&values, "first\nsecond", "\n"));
+        assert!(!contents_are_saved(&values, "first\nsecond external", "\n"));
+        assert!(!contents_are_saved(&values, "first\nsecon", "\n"));
+
+        let lines = vec!["second\n".to_owned(), "first\n".to_owned()];
+        assert!(contents_are_saved(&lines, "first\nsecond\n", ""));
+        assert!(!contents_are_saved(&lines, "first\nsecond\nexternal", ""));
+        assert!(!contents_are_saved(&lines, "first\n\nsecond\n", ""));
+    }
+}

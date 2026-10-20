@@ -524,7 +524,26 @@ fn copy_selection(cx: &mut Context) -> bool {
 }
 
 pub(super) fn standard_copy(cx: &mut Context) {
-    copy_selection(cx);
+    let (view, doc) = current_ref!(cx.editor);
+    if doc.selection(view.id).iter().all(|range| range.is_empty()) {
+        let text = doc.text().slice(..);
+        let values = doc
+            .selection(view.id)
+            .line_ranges(text)
+            .flat_map(|(first, last)| first..=last)
+            .map(|line| {
+                let start = text.line_to_char(line);
+                let end = line_end_char_index(&text, line);
+                format!("{}{}", text.slice(start..end), doc.line_ending.as_str())
+            })
+            .collect();
+        if let Err(err) = cx.editor.registers.write_clipboard_lines(values) {
+            cx.editor
+                .set_error(format!("Cannot copy to clipboard: {err}"));
+        }
+    } else {
+        copy_selection(cx);
+    }
 }
 
 pub(super) fn standard_cut(cx: &mut Context) {
@@ -609,15 +628,54 @@ pub(crate) fn paste_text(cx: &mut Context, text: &str) {
 }
 
 pub(super) fn standard_paste(cx: &mut Context) {
-    let values: Vec<_> = cx
-        .editor
-        .registers
-        .read('+', cx.editor)
-        .into_iter()
-        .flatten()
-        .map(Cow::into_owned)
+    let Some(values) = cx.editor.registers.read('+', cx.editor) else {
+        return;
+    };
+    let linewise = values.is_linewise();
+    let values: Vec<_> = values.map(Cow::into_owned).collect();
+    let (view, doc) = current_ref!(cx.editor);
+    if linewise && doc.selection(view.id).iter().all(|range| range.is_empty()) {
+        paste_lines(cx, &values);
+    } else {
+        replace_values(cx, &values);
+    }
+}
+
+fn paste_lines(cx: &mut Context, values: &[String]) {
+    if values.is_empty() {
+        return;
+    }
+    let (view, doc) = current!(cx.editor);
+    let text = doc.text().slice(..);
+    let selection = doc.selection(view.id);
+    // One insertion per line, even when several carets share the same line.
+    let targets = Selection::new(
+        selection
+            .iter()
+            .map(|r| Range::point(line_end_char_index(&text, text.char_to_line(r.head))))
+            .collect(),
+        selection.primary_index(),
+    );
+    let line_ending = doc.line_ending.as_str();
+    let values: Vec<_> = values
+        .iter()
+        .map(|s| LINE_ENDING_REGEX.replace_all(s, line_ending).into_owned())
         .collect();
-    replace_values(cx, &values);
+    let joined = values.concat();
+    let distribute = values.len() == targets.len();
+    let mut index = 0;
+    let transaction = Transaction::change_by_and_with_selection(doc.text(), &targets, |r| {
+        let value = if distribute { &values[index] } else { &joined };
+        index += 1;
+        let value = value.strip_suffix(line_ending).unwrap_or(value);
+        let inserted = format!("{line_ending}{value}");
+        let caret = r.head + inserted.chars().count();
+        (
+            (r.head, r.head, Some(inserted.into())),
+            Some(Range::point(caret)),
+        )
+    });
+    doc.apply(&transaction, view.id);
 }
 
 fn remove_selected_text(cx: &mut Context) {

@@ -347,7 +347,7 @@ impl MappableCommand {
         standard_delete_forward, "Delete selection or next grapheme",
         standard_delete_word_backward, "Delete selection or previous word",
         standard_delete_word_forward, "Delete selection or next word",
-        standard_copy, "Copy selected text to clipboard",
+        standard_copy, "Copy selected text or current lines to clipboard",
         standard_cut, "Cut selected text or current lines to clipboard",
         standard_paste, "Replace selected text with clipboard",
         standard_newline, "Replace selection with an indented newline",

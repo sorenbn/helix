@@ -35,8 +35,9 @@ files, switching buffers, changing splits, and dismissing prompts.
 | Ctrl + Shift + P | Open a command entry point |
 | Escape | Dismiss the active popup first; otherwise clear the selection |
 
-With no selection, copy leaves the clipboard unchanged and cut removes the current
-whole line. Clipboard paste and
+With no selection, Ctrl + C copies the current whole line and Ctrl + X removes it.
+Whole-line copies paste below the current line when nothing is selected;
+ordinary clipboard text and terminal paste insert at the caret. Clipboard paste and
 terminal bracketed paste both replace the selection as one undoable edit.
 Mouse clicks place a caret; dragging selects the exact intervening text.
 Typing `hjkl`, digits, spaces, and punctuation always inserts those characters.

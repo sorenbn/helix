@@ -61,10 +61,13 @@ Escape before the editor does.
 With no selection, Ctrl + X cuts the whole current source line, including its line
 ending when present. Multiple carets cut each affected line once. Cutting the last
 line removes its preceding line break so an empty last line is not left behind.
-Ctrl + C leaves the clipboard untouched when no text is selected. Pasting replaces
-selected text, including when the clipboard contains complete lines. Consecutive
-typing is grouped into one undo step. Movement, selection changes, switching
-between insertion and deletion, and standalone edits create undo boundaries.
+With no selection, Ctrl + C copies the whole current line and Ctrl + V pastes
+that line below the current line. Multiple carets copy and paste each distinct
+line once. Selected text and text copied from other applications paste at the
+caret. Pasting replaces selected text, including when the clipboard contains
+complete lines. Consecutive typing is grouped into one undo step. Movement,
+selection changes, switching between insertion and deletion, and standalone edits
+create undo boundaries.
 
 Comment shortcuts are two-step chords: press Ctrl + K, then Ctrl + C or Ctrl + U.
 The second key also works after releasing Ctrl. Comments use the language's line

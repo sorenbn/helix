@@ -102,13 +102,102 @@ async fn clipboard_and_undo() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn empty_copy_preserves_clipboard() -> anyhow::Result<()> {
+async fn copy_whole_line_without_selection() -> anyhow::Result<()> {
+    for (input, output) in [
+        (
+            "first\nse#[|]#cond\nlast",
+            "first\nsecond\nsecond#[|]#\nlast",
+        ),
+        ("on#[|]#ly", "only\nonly#[|]#"),
+        ("on#[|]#ly\n", "only\nonly#[|]#\n"),
+        ("last\n#[|]#", "last\n\n#[|]#"),
+        ("#[|]#", "\n#[|]#"),
+        ("  é👩‍💻#[|]#z", "  é👩‍💻z\n  é👩‍💻z#[|]#"),
+    ] {
+        standard(input, "<C-c><C-v>", output).await?;
+    }
     standard(
-        "#[|]#abcd",
-        "<S-right><S-right><C-c><right><C-c><C-v>",
-        "abab#[|]#cd",
+        "fi#[|]#rst\nsecond\nlast",
+        "<C-c><down><C-v>",
+        "first\nsecond\nfirst#[|]#\nlast",
     )
     .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn line_copy_undo_and_redo() -> anyhow::Result<()> {
+    let input = "a#[|]#bc\nnext";
+    standard(input, "<C-c>", input).await?;
+    standard(input, "<C-c><C-v><C-z>", input).await?;
+    standard(input, "<C-c><C-v><C-z><C-y>", "abc\nabc#[|]#\nnext").await?;
+    standard(input, "<C-c><C-v><C-v>", "abc\nabc\nabc#[|]#\nnext").await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn line_copy_with_multiple_carets() -> anyhow::Result<()> {
+    for (input, output) in [
+        ("a#[|]#b\nc#(|)#d", "ab\nab#[|]#\ncd\ncd#(|)#"),
+        ("a#[|]#\nb\nc#(|)#", "a\na#[|]#\nb\nc\nc#(|)#"),
+        ("a#(|)#b#[|]#c", "abc\nabc#[|]#"),
+        ("a#(|)#\nc#[|]#", "a\na#(|)#\nc\nc#[|]#"),
+    ] {
+        standard(input, "<C-c><C-v>", output).await?;
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn line_copy_preserves_selected_paste_and_character_copy() -> anyhow::Result<()> {
+    standard("a#[|]#bc\nnext", "<C-c><C-a><C-v>", "abc\n#[|]#").await?;
+    standard(
+        "a#[|]#bc\nnext",
+        "<C-c><home><S-right><C-c><end><C-v>",
+        "abca#[|]#\nnext",
+    )
+    .await?;
+    standard(
+        "a#[|]#bc\nnext",
+        "<C-c><home><S-end><S-right><C-c><end><C-v>",
+        "abc\nnextabc\n#[|]#",
+    )
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn line_copy_and_paste_normalize_line_endings() -> anyhow::Result<()> {
+    for eol in ["\n", "\r\n"] {
+        let mut config = config();
+        config.editor.default_line_ending = if eol == "\n" {
+            helix_view::editor::LineEndingConfig::LF
+        } else {
+            helix_view::editor::LineEndingConfig::Crlf
+        };
+        test_with_config(
+            AppBuilder::new().with_config(config.clone()),
+            (
+                format!("a#[|]#b{eol}next"),
+                "<C-c><C-v>",
+                format!("ab{eol}ab#[|]#{eol}next"),
+                LineFeedHandling::AsIs,
+            ),
+        )
+        .await?;
+        // Explicit positions avoid the annotation helper collapsing adjacent
+        // newlines around a zero-width selection.
+        test_with_config(
+            AppBuilder::new().with_config(config),
+            TestCase {
+                in_text: format!("{eol}next"),
+                in_selection: Selection::point(0),
+                in_keys: "<C-c><C-v>".to_owned(),
+                out_text: format!("{eol}{eol}next"),
+                out_selection: Selection::point(eol.chars().count()),
+                line_feed_handling: LineFeedHandling::AsIs,
+            },
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 async fn comment_case(file: &str, input: &str, keys: &str, output: &str) -> anyhow::Result<()> {
