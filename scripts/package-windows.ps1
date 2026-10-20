@@ -18,10 +18,18 @@ try {
     $executable = Join-Path $repo 'target\opt\hx.exe'
     if (-not (Test-Path -LiteralPath $executable)) { throw 'Build target/opt/hx.exe first.' }
     if ($BuildGrammars) {
-        & $executable --grammar fetch --strict
-        if ($LASTEXITCODE -ne 0) { throw 'Grammar fetch failed.' }
-        & $executable --grammar build --strict
-        if ($LASTEXITCODE -ne 0) { throw 'Grammar build failed.' }
+        # Match `cargo run`: the manifest's sibling runtime takes priority over
+        # the user config runtime, which otherwise precedes HELIX_RUNTIME.
+        $previousManifestDirectory = $env:CARGO_MANIFEST_DIR
+        try {
+            $env:CARGO_MANIFEST_DIR = Join-Path $repo 'helix-term'
+            & $executable --grammar fetch --strict
+            if ($LASTEXITCODE -ne 0) { throw 'Grammar fetch failed.' }
+            & $executable --grammar build --strict
+            if ($LASTEXITCODE -ne 0) { throw 'Grammar build failed.' }
+        } finally {
+            $env:CARGO_MANIFEST_DIR = $previousManifestDirectory
+        }
     }
     $grammars = @(Get-ChildItem -LiteralPath (Join-Path $repo 'runtime\grammars') -File | Where-Object Extension -eq '.dll')
     if ($grammars.Count -eq 0) { throw 'No compiled grammars found. Rerun with -BuildGrammars.' }
